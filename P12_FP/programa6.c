@@ -10,14 +10,9 @@ int main(int argc, char **argv){
     archivo=fopen (argv[1], "r");
     if (archivo!=NULL){
         printf("El archivo se abrió correctamente\n");
-        char cosa[30];
-        float precio;
-        while(feof(archivo)==0){
-            fscanf(archivo, "%s\t%f" , cosa, &precio);
-            //cuando se conoce el formato de la info dentro del archivo o tiene estructura muy especifica
-            printf("%s\t%0.2f \n", cosa, precio);
-            //la primera no lleva & por ser direccion de un arreglo
-        }
+        char cosa[]="microondas";
+        float precio=6000.00;
+        fprintf(archivo, "%s\t%0.2f \n", cosa, precio);
         int res=fclose(archivo);
         printf("fclose = %d\n", res);
     }else {
