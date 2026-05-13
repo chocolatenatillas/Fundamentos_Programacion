@@ -7,6 +7,7 @@
 #define WIDTH 55
 #define HEIGHT 24
 
+// Colores ANSI
 #define RED     "\033[1;31m"
 #define GREEN   "\033[1;32m"
 #define YELLOW  "\033[1;33m"
@@ -36,7 +37,7 @@ void enableRawMode() {
     tcgetattr(STDIN_FILENO, &newt);
     newt.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    fcntl(STDIN_FILENO, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);
+    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);
 }
 #endif
 
@@ -58,9 +59,10 @@ void setup() {
 }
 
 void draw() {
-    printf("\033[H"); 
+    printf("\033[H"); // Cursor al inicio
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
+            // Dibujado de entidades con prioridad
             if (i == (int)ship.y && j == (int)ship.x) printf(GREEN "▲" RESET);
             else if (i == (int)ship.y + 1 && j >= (int)ship.x - 1 && j <= (int)ship.x + 1) printf(GREEN "█" RESET);
             else if (bullet.active && i == (int)bullet.y && j == (int)bullet.x) printf(CYAN "o" RESET);
@@ -81,54 +83,79 @@ int main() {
 #ifndef _WIN32
     enableRawMode();
 #endif
-    printf("\033[?25l");
+    printf("\033[?25l"); // Ocultar cursor
     system("cls || clear");
+
     int frame = 0;
     while (!game_over) {
         char key = getInput();
         if (key == 'p' || key == 'P') paused = !paused;
         if (key == 'x' || key == 'X') break;
+
         if (!paused) {
-            if (key == 'a' || key == 'A') ship.dx = -1.0f;
-            if (key == 'd' || key == 'D') ship.dx = 1.0f;
+            // 1. Movimiento y REBOTE de la Nave
+            if (key == 'a' || key == 'A') ship.dx = -1.1f;
+            if (key == 'd' || key == 'D') ship.dx = 1.1f;
             if ((key == 'k' || key == 'K' || key == ' ') && !bullet.active) 
-                bullet = (Entity){ship.x, ship.y - 1, 0.5f, -1.3f, true};
+                bullet = (Entity){ship.x, ship.y - 1, 0.4f, -1.2f, true};
 
             ship.x += ship.dx;
-            if (ship.x <= 1 || ship.x >= WIDTH - 2) { ship.dx *= -1; ship.x += ship.dx; }
+            // Rebote en bordes invisibles
+            if (ship.x <= 1 || ship.x >= WIDTH - 2) { 
+                ship.dx *= -1; 
+                ship.x += ship.dx; 
+            }
 
+            // 2. Balas del Jugador (Rebotan en todos lados menos abajo)
             if (bullet.active) {
                 bullet.x += bullet.dx; bullet.y += bullet.dy;
-                if (bullet.x <= 0 || bullet.x >= WIDTH - 1) bullet.dx *= -1;
-                if (bullet.y <= 0) bullet.dy *= -1;
-                if (bullet.y >= HEIGHT) bullet.active = false;
+                if (bullet.x <= 0 || bullet.x >= WIDTH - 1) bullet.dx *= -1; // Rebote lateral
+                if (bullet.y <= 0) bullet.dy *= -1; // Rebote arriba
+                if (bullet.y >= HEIGHT) bullet.active = false; // Desaparece abajo
+                
+                // Colisión con enemigo
                 if (enemy.active && (int)bullet.y == (int)enemy.y && (int)bullet.x == (int)enemy.x) {
                     score += 100; enemy.active = false; bullet.active = false;
                 }
             }
-            if (enemy.active) {
-                enemy.y += 0.05f;
-                enemy.x = (WIDTH / 2.0f) + (sinf(frame * 0.07f) * (WIDTH / 2.5f));
-                if (!enemyBullet.active && rand() % 45 == 0) enemyBullet = (Entity){enemy.x, enemy.y + 1, 0, 0.8f, true};
-                if (enemy.y >= ship.y + 1) enemy.active = false;
-            } else if (frame % 150 == 0) { enemy.active = true; enemy.y = 1; }
 
+            // 3. Enemigo (Trayectoria NO RECTA y Desaparece por altura)
+            if (enemy.active) {
+                enemy.y += 0.06f; // Baja lento
+                enemy.x = (WIDTH / 2.0f) + (sinf(frame * 0.08f) * (WIDTH / 3.0f)); // Movimiento curva
+                
+                if (!enemyBullet.active && rand() % 40 == 0) 
+                    enemyBullet = (Entity){enemy.x, enemy.y + 1, 0, 0.8f, true};
+
+                // REGLA: Si llega a la altura de la nave, desaparece
+                if (enemy.y >= ship.y + 1) enemy.active = false;
+            } else if (frame % 150 == 0) { 
+                enemy.active = true; enemy.y = 1; 
+            }
+
+            // 4. Lógica de Asteroides (También desaparecen por altura)
+            if (asteroid.active) {
+                asteroid.x += asteroid.dx; asteroid.y += asteroid.dy;
+                if (asteroid.x <= 0 || asteroid.x >= WIDTH - 1) asteroid.dx *= -1;
+                if (asteroid.y >= ship.y + 1) asteroid.active = false;
+            } else if (rand() % 70 == 0) {
+                asteroid = (Entity){(float)(rand() % WIDTH), 0, (float)((rand()%10-5)*0.1), 0.4f, true};
+            }
+
+            // 5. Bala Enemiga (Colisión con jugador)
             if (enemyBullet.active) {
                 enemyBullet.y += 0.8f;
                 if (enemyBullet.y >= HEIGHT) enemyBullet.active = false;
                 if (enemyBullet.active && (int)enemyBullet.y == (int)ship.y && abs((int)enemyBullet.x - (int)ship.x) <= 1) game_over = true;
             }
-            if (asteroid.active) {
-                asteroid.x += asteroid.dx; asteroid.y += asteroid.dy;
-                if (asteroid.x <= 0 || asteroid.x >= WIDTH - 1) asteroid.dx *= -1;
-                if (asteroid.y >= ship.y + 1) asteroid.active = false;
-            } else if (rand() % 70 == 0) asteroid = (Entity){(float)(rand() % WIDTH), 0, (float)((rand()%10-5)*0.1), 0.4f, true};
 
+            // 6. Bonus Estrella
             if (star.active) {
                 star.y += 0.3f;
                 if (star.y >= HEIGHT) star.active = false;
                 if ((int)star.y == (int)ship.y && abs((int)star.x - (int)ship.x) <= 1) { score += 500; star.active = false; }
             } else if (rand() % 300 == 0) star = (Entity){(float)(rand() % WIDTH), 0, 0, 0.3f, true};
+
             frame++;
         }
         draw();
@@ -138,6 +165,6 @@ int main() {
             usleep(30000); 
         #endif
     }
-    printf("\033[?25h" RED "\n  GAME OVER - Score: %d\n" RESET, score);
+    printf("\033[?25h" RED "\n  GAME OVER - Los enemigos superaron la defensa. Score: %d\n" RESET, score);
     return 0;
 }
